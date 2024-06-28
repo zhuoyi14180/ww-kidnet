@@ -10,9 +10,8 @@ import json
 import torch
 import torch.backends.cudnn as cudnn
 import torch.optim
-from network.transbts import TransBTS
-from network.model.unet3d import UNet3D
-import torch.distributed as dist
+from models.TransBTS.TransBTS_downsample8x_skipconnection import TransBTS
+from models.unet.unet3d import UNet3D
 
 import criterion
 from prepare.data import BraTS
@@ -51,7 +50,7 @@ parser.add_argument('--num_workers', default=8, type=int)
 
 parser.add_argument('--batch_size', default=6, type=int)
 
-parser.add_argument('--start_epoch', default=0, type=int)
+parser.add_argument('--start_epoch', default=1, type=int)
 
 parser.add_argument('--end_epoch', default=400, type=int)
 
@@ -96,7 +95,7 @@ def main_worker():
         model = UNet3D(4, 4)
         find_unused_parameters = False
     elif args.model == "transbts":
-        model = TransBTS(dataset='brats', _conv_repr=True, _pe_type="learned")
+        _, model = TransBTS(dataset='brats', _conv_repr=True, _pe_type="learned")
         find_unused_parameters = True
     else:
         raise ValueError(f"Invalid model {args.model}, check first.")
@@ -112,7 +111,6 @@ def main_worker():
 
     logging.info('Total number of parameters: {}'.format(total_params))
     
-
     crit = getattr(criterion, args.criterion)
 
     if local_rank == 0:
@@ -151,7 +149,7 @@ def main_worker():
 
     for epoch in range(args.start_epoch, args.end_epoch):
         train_sampler.set_epoch(epoch)
-        setproctitle.setproctitle('{}: {}/{}'.format(args.model, epoch+1, args.end_epoch))
+        setproctitle.setproctitle('{}: {}/{}'.format(args.model, epoch, args.end_epoch))
         start_epoch_time = time.time()
 
         metric = Accumulator(4)
@@ -189,7 +187,7 @@ def main_worker():
             
             stats.append(metric.data)
 
-            if (epoch + 1) % int(args.save_freq) == 0:
+            if (epoch) % int(args.save_freq) == 0:
                 file_name = os.path.join(checkpoint_dir, '{}-{}-epoch_{}.pth'.format(args.model, args.dataset, epoch))
                 torch.save({
                     'epoch': epoch,
@@ -205,14 +203,14 @@ def main_worker():
 
         if local_rank == 0:
             epoch_time_minute = (end_epoch_time - start_epoch_time) / 60
-            remaining_time_hour = (args.end_epoch - (epoch + 1)) * epoch_time_minute / 60
+            remaining_time_hour = (args.end_epoch - epoch) * epoch_time_minute / 60
             logging.info('Current epoch time consumption: {:.2f} minutes.'.format(epoch_time_minute))
             logging.info('Estimated remaining training time: {:.2f} hours.'.format(remaining_time_hour))
 
     if local_rank == 0:
         # writer.close()
-
-        with open(f"./{args.model}-{args.dataset}.json", "w") as f:
+        
+        with open(os.path.join(config.COLLECTION_DIR, f"{args.model}-{args.dataset}.json"), "w") as f:
             json.dump(stats, f)
 
         final_name = os.path.join(checkpoint_dir, '{}-{}-last.pth'.format(args.model, args.dataset))
@@ -233,7 +231,7 @@ def main_worker():
 if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     print(f"Number of devices available: {torch.cuda.device_count()}")
-    print(f"Process {os.getpid()} is using CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')}")
+    print(f"Process {os.getpid()} is using LOCAL_RANK={local_rank}")
     assert torch.cuda.is_available(), "Only CUDA version is supported."
     torch.backends.cudnn.enabled = True
     torch.backends.cudnn.benchmark = True

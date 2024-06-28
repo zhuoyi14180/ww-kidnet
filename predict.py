@@ -12,8 +12,8 @@ import imageio
 from config import Config, PediatricConfig
 from evaluate import dice_score
 from prepare.data import BraTS
-from network.transbts import TransBTS
-from network.model.unet3d import UNet3D
+from models.TransBTS.TransBTS_downsample8x_skipconnection import TransBTS
+from models.unet.unet3d import UNet3D
 from torch.utils.data import DataLoader
 from criterion import softmax_dice
 import json
@@ -178,8 +178,7 @@ def validate(
                         imageio.imwrite(os.path.join(visual_path, title, name, str(frame)+'.png'), ss_img[:, :, :, frame])
     
     
-
-    with open(f"./pic/valid_stats-{title}.json", "w") as f:
+    with open(os.path.join(config.PIC_DIR, f"valid_stats-{title}.json"), "w") as f:
         json.dump(stats, f)
 
     print(f'Total runtime: {round(sum(runtimes)/len(runtimes), 4)} minutes.')

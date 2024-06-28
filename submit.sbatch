@@ -21,8 +21,8 @@ source /etc/profile.d/conda.sh
 
 
 ## Execute your program(s) ##
-torchrun --nproc_per_node=3 ./train.py --model=transbts --end_epoch=200 --dataset=brats_ped_2023 --save_freq=5000
-# torchrun --nproc_per_node=3 ./train.py --model=unet3d --end_epoch=200 --dataset=brats_ped_2023 --save_freq=5000
+torchrun --nproc_per_node=3 ./train.py --model=transbts --end_epoch=1000 --dataset=brats_ped_2023 --save_freq=5000
+torchrun --nproc_per_node=3 ./train.py --model=unet3d --end_epoch=500 --dataset=brats_ped_2023 --save_freq=200
 
-# torchrun --nproc_per_node=3 ./train.py --model=transbts --end_epoch=1000 --dataset=brats_2019 --save_freq=500
-# torchrun --nproc_per_node=3 ./train.py --model=unet3d --end_epoch=200 --dataset=brats_2019 --save_freq=5000
+# torchrun --nproc_per_node=3 ./train.py --model=transbts --end_epoch=1000 --dataset=brats_2019 --save_freq=5000 --seed=1000
+# torchrun --nproc_per_node=3 ./train.py --model=unet3d --end_epoch=1000 --dataset=brats_2019 --save_freq=5000 --seed=1000

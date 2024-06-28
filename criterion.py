@@ -37,7 +37,7 @@ def flatten(x):
     return transposed.reshape(num_c, -1)
 
 
-def Dice(output, target, eps=1e-5):
+def dice(output, target, eps=1e-5):
     target = target.float()
     num = 2 * (output * target).sum()
     den = output.sum() + target.sum() + eps
@@ -51,9 +51,9 @@ def softmax_dice(output, target):
     :param target: (b, d, h, w)
     :return: softmax dice loss - version 1
     '''
-    loss1 = Dice(output[:, 1, ...], (target == 1).float())
-    loss2 = Dice(output[:, 2, ...], (target == 2).float())
-    loss3 = Dice(output[:, 3, ...], (target == 3).float())
+    loss1 = dice(output[:, 1, ...], (target == 1).float())
+    loss2 = dice(output[:, 2, ...], (target == 2).float())
+    loss3 = dice(output[:, 3, ...], (target == 3).float())
 
     return loss1 + loss2 + loss3, 1 - loss1.data, 1 - loss2.data, 1 - loss3.data
 
@@ -65,10 +65,10 @@ def softmax_dice_back(output, target):
     :param target: (b, d, h, w)
     :return: softmax dice loss - version 2
     '''
-    loss0 = Dice(output[:, 0, ...], (target == 0).float())
-    loss1 = Dice(output[:, 1, ...], (target == 1).float())
-    loss2 = Dice(output[:, 2, ...], (target == 2).float())
-    loss3 = Dice(output[:, 3, ...], (target == 3).float())
+    loss0 = dice(output[:, 0, ...], (target == 0).float())
+    loss1 = dice(output[:, 1, ...], (target == 1).float())
+    loss2 = dice(output[:, 2, ...], (target == 2).float())
+    loss3 = dice(output[:, 3, ...], (target == 3).float())
 
     return loss1 + loss2 + loss3 + loss0, 1 - loss1.data, 1 - loss2.data, 1 - loss3.data
 
@@ -80,8 +80,8 @@ def sigmoid_dice(output, target):
     :param target: (b, d, h, w)
     :return:
     '''
-    loss1 = Dice(output[:, 0, ...], (target == 1).float())
-    loss2 = Dice(output[:, 1, ...], (target == 2).float())
-    loss3 = Dice(output[:, 2, ...], (target == 3).float())
+    loss1 = dice(output[:, 0, ...], (target == 1).float())
+    loss2 = dice(output[:, 1, ...], (target == 2).float())
+    loss3 = dice(output[:, 2, ...], (target == 3).float())
 
     return loss1 + loss2 + loss3, 1 - loss1.data, 1 - loss2.data, 1 - loss3.data

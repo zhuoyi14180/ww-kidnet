@@ -5,10 +5,12 @@ class Config:
     def __init__(self):
         self.BASE_DIR = os.path.dirname(os.path.abspath(__file__))
         self.DATA_DIR = os.path.join("/dcs", "large", "u5531613", "data")
-        self.LOG_DIR = os.path.join(self.BASE_DIR, "log")
-        self.CHECK_POINT_DIR = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'checkpoint')
+        self.LOG_DIR = os.path.join(self.BASE_DIR, "logs")
+        self.COLLECTION_DIR = os.path.join(self.BASE_DIR, "collections")
+        self.CHECK_POINT_DIR = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'checkpoints')
         self.RES_DIR = os.path.join(self.DATA_DIR, "res")
         self.VISUAL_DIR = os.path.join(self.DATA_DIR, "visual")
+        self.PIC_DIR = os.path.join(self.BASE_DIR, "analysis")
 
 
 class PediatricConfig(Config):
