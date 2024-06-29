@@ -1,12 +1,15 @@
-def dice_score(o, t, eps=1e-8):
-    num = 2 * (o * t).sum() + eps
-    den = o.sum() + t.sum() + eps
-    return num/den
+import torch
+
+def dice_score(output, target, eps=1e-8):
+    target = target.float()
+    num = 2. * (output * target).sum() + eps
+    den = output.sum() + target.sum() + eps
+    return num / den
 
 
-def mIOU(o, t, eps=1e-8):
-    num = (o * t).sum() + eps
-    den = (o | t).sum() + eps
+def mIOU(output, target, eps=1e-8):
+    num = (output * target).sum() + eps
+    den = (output | target).sum() + eps
     return num/den
 
 
@@ -19,19 +22,23 @@ def softmax_mIOU_score(output, target):
 
 
 def softmax_output_dice(output, target):
-    ret = []
+    
+    output = output.argmax(1)
+
+    output = torch.squeeze(output)
+    res = []
     # whole
     o = output > 0; t = target > 0 # ce
-    ret += dice_score(o, t),
+    res += dice_score(o, t).item(),
 
     # core
     o = (output == 1) | (output == 3)
     t = (target == 1) | (target == 3)
-    ret += dice_score(o, t),
+    res += dice_score(o, t).item(),
 
     # active
     o = (output == 3); 
     t = (target == 3)
-    ret += dice_score(o, t),
+    res += dice_score(o, t).item(),
 
-    return ret
+    return res

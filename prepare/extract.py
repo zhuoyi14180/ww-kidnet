@@ -25,5 +25,5 @@ def save_tree_to_file(tree, file_path):
 
 
 if __name__ == "__main__":
-    train = AdultConfig().BRATS_TRAIN
+    train = PediatricConfig().BRATS_VALID
     save_tree_to_file(extract_tree(train["dir"]), os.path.join(train["dir"], train["list"]))

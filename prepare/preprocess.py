@@ -13,7 +13,7 @@ sys.path.append(project_root)
 from config import PediatricConfig, AdultConfig
 
 
-config = AdultConfig()
+config = PediatricConfig()
 
 modalities = config.modalities
 
@@ -72,5 +72,6 @@ def process(info, flag='-'):
 
 
 if __name__ == '__main__':
-    process(train, flag="_")
+    # process(train, flag="_")
+    process(valid, flag="-")
 

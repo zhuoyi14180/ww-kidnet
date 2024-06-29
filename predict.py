@@ -9,19 +9,22 @@ cudnn.benchmark = True
 import numpy as np
 import nibabel as nib
 import imageio
-from config import Config, PediatricConfig
+from config import Config, PediatricConfig, AdultConfig
 from evaluate import dice_score
 from prepare.data import BraTS
 from models.TransBTS.TransBTS_downsample8x_skipconnection import TransBTS
 from models.unet.unet3d import UNet3D
 from torch.utils.data import DataLoader
 from criterion import softmax_dice
+from evaluate import softmax_output_dice
 import json
 import gc
 
+from utils import Accumulator
+
 config = Config()
 
-def tailor_and_concat(x, model, flag=False):
+def tailor_and_concat(x, model, flag=True):
     if (flag == False):
         return model(x)
 
@@ -39,7 +42,7 @@ def tailor_and_concat(x, model, flag=False):
     y = x.clone()
 
     for i in range(len(temp)):
-        temp[i] = model(temp[i])
+        temp[i] = model(temp[i]).detach().cpu()
 
     y[..., :128, :128, :128] = temp[0]
     y[..., :128, 128:240, :128] = temp[1][..., :, 16:128, :]
@@ -53,10 +56,6 @@ def tailor_and_concat(x, model, flag=False):
     return y[..., :155]
 
 
-save_path=config.RES_DIR
-visual_path = config.VISUAL_DIR
-
-
 def validate(
         title, 
         data_loader,
@@ -67,18 +66,20 @@ def validate(
         format='nii',
         snapshot=False,
         valid=True,
-        name_list=None
+        name_list=None, 
+        save_path=None
         ):
 
-    H, W, D = 128, 128, 128
+    H, W, D = 224, 224, 155
     model.eval()
 
     runtimes = []
 
     stats = []
 
-    criterion = softmax_dice
+    dice_out = []
 
+    criterion = softmax_dice
     
     checkpoint = torch.load(load_file)
 
@@ -96,6 +97,7 @@ def validate(
 
     model.cuda()
     
+    metric = Accumulator(3)
 
     for i, (data, idx) in enumerate(data_loader):
         msg = 'Iter {}/{}, '.format(i + 1, len(data_loader))
@@ -107,10 +109,10 @@ def validate(
 
         if valid:
             data = [sample.cuda(non_blocking=True) for sample in data]
-            x, target = data[:2]
+            x, target = data
+            target = target[..., :155]
         else:
-            x = data
-            x.cuda(non_blocking=True)
+            x = data.cuda(non_blocking=True)
 
 
         torch.cuda.synchronize()
@@ -139,6 +141,9 @@ def validate(
         if valid:
             loss, score1, score2, score3 = criterion(output, target)
             stats.append({"data": [loss.detach().cpu().item(), score1.detach().cpu().item(), score2.detach().cpu().item(), score3.detach().cpu().item()], "name": name})
+            res = softmax_output_dice(output, target)
+            dice_out.append(res)
+            metric.add(*res)
 
         logit.to("cpu")
         x.to("cpu")
@@ -150,11 +155,12 @@ def validate(
         torch.cuda.empty_cache()
         output = output.argmax(0)
         
-
         print(msg + name)
 
         if save_path:
             assert format in ['npy', 'nii'], "Invalid save format, check first (`nii` and `npy` only)"
+            if not os.path.exists(os.path.join(save_path, title)):
+                    os.makedirs(os.path.join(save_path, title))
             if format == 'npy':
                 np.save(os.path.join(save_path, title, name + '.npy'), output)
             if format == 'nii':
@@ -178,30 +184,59 @@ def validate(
                         imageio.imwrite(os.path.join(visual_path, title, name, str(frame)+'.png'), ss_img[:, :, :, frame])
     
     
-    with open(os.path.join(config.PIC_DIR, f"valid_stats-{title}.json"), "w") as f:
-        json.dump(stats, f)
+    if valid:
+        with open(os.path.join(config.PIC_DIR, f"valid_stats-{title}.json"), "w") as f:
+            json.dump(stats, f)
+
+        print(dice_out)
+
+        print(metric.avg())
+
 
     print(f'Total runtime: {round(sum(runtimes)/len(runtimes), 4)} minutes.')
 
 
 if __name__ == "__main__":
-    brats_ped_valid = PediatricConfig().BRATS_TRAIN
+
+    save_path=config.RES_DIR
+    visual_path = config.VISUAL_DIR
+
+
+    brats_ped_valid = PediatricConfig().BRATS_VALID
     valid_dir = brats_ped_valid["dir"]
     valid_list = brats_ped_valid["list"]
 
-    valid_set = BraTS(os.path.join(valid_dir, valid_list), valid_dir, "valid")
+    valid_set = BraTS(os.path.join(valid_dir, valid_list), valid_dir, "test")
     valid_loader = DataLoader(dataset=valid_set, batch_size=1,
                               drop_last=False, num_workers=6, pin_memory=True, shuffle=False)
 
 
-    model = TransBTS(dataset='brats', _conv_repr=True, _pe_type="learned")
-    load_file = os.path.join(config.CHECK_POINT_DIR, "transbts-brats_ped_2023-2024-06-24", "transbts-brats_ped_2023-last.pth")
-    # load_file = os.path.join(config.CHECK_POINT_DIR, "transbts-brats_ped_2023-2024-06-12", "transbts-brats_ped_2023-last.pth")
-    validate("transbts-brats_ped_2023_poly", valid_loader, model, load_file, snapshot=False, name_list=valid_set.name_list, verbose=True)
+    _, model = TransBTS(dataset='brats', _conv_repr=True, _pe_type="learned")
+    load_file = os.path.join(config.CHECK_POINT_DIR, "transbts-brats_ped_2023-2024-06-28", "transbts-brats_ped_2023-last.pth")
+    validate("transbts-brats_ped_2023-poly-valid", valid_loader, model, load_file, snapshot=False, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=False)
+
+
+    model = UNet3D(4, 4)
+    load_file = os.path.join(config.CHECK_POINT_DIR, "unet3d-brats_ped_2023-2024-06-28", "unet3d-brats_ped_2023-last.pth")
+    validate("unet3d-brats_ped_2023-poly-valid", valid_loader, model, load_file, snapshot=False, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=False)
+
+
+
+
+    # brats_valid = AdultConfig().BRATS_VALID
+    # valid_dir = brats_valid["dir"]
+    # valid_list = brats_valid["list"]
+
+    # valid_set = BraTS(os.path.join(valid_dir, valid_list), valid_dir, "test")
+    # valid_loader = DataLoader(dataset=valid_set, batch_size=1,
+    #                           drop_last=False, num_workers=6, pin_memory=True, shuffle=False)
+
+
+    # _, model = TransBTS(dataset='brats', _conv_repr=True, _pe_type="learned")
+    # load_file = os.path.join(config.CHECK_POINT_DIR, "transbts-brats_2019-2024-06-26", "transbts-brats_2019-last.pth")
+    # validate("transbts-brats_2019-poly-valid", valid_loader, model, load_file, snapshot=False, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=False)
 
 
     # model = UNet3D(4, 4)
-    model = TransBTS(dataset='brats', _conv_repr=True, _pe_type="learned")
-    load_file = os.path.join(config.CHECK_POINT_DIR, "transbts-brats_ped_2023-2024-06-25", "transbts-brats_ped_2023-last.pth")
-    # load_file = os.path.join(config.CHECK_POINT_DIR, "unet3d-brats_ped_2023-2024-06-11", "unet3d-brats_ped_2023-last.pth")
-    validate("transbts-brats_ped_2023", valid_loader, model, load_file, snapshot=False, name_list=valid_set.name_list, verbose=True)
+    # load_file = os.path.join(config.CHECK_POINT_DIR, "unet3d-brats_2019-2024-06-27", "unet3d-brats_2019-last.pth")
+    # validate("unet3d-brats_2019-poly-valid", valid_loader, model, load_file, snapshot=False, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=False)

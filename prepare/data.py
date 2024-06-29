@@ -136,7 +136,6 @@ def transform_train(sample):
 def transform_valid(sample):
     transform = transforms.Compose([
         Padding(),
-        FixedCrop(),
         # MaxMinNormalization(),
         ToTensor()
     ])
@@ -190,7 +189,7 @@ class BraTS(Dataset):
             image = np.pad(image, ((0, 0), (0, 0), (0, 5), (0, 0)), mode='constant')
             image = np.ascontiguousarray(image.transpose(3, 0, 1, 2))
             image = torch.from_numpy(image).float()
-            return image
+            return image, item
 
     def __len__(self):
         return len(self.name_list)

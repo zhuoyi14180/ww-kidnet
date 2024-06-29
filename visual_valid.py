@@ -2,14 +2,17 @@ import json
 import matplotlib.pyplot as plt
 import os
 import numpy as np
+from config import Config
 
-file_path_1 = os.path.join('./pic', 'valid_stats-transbts-brats_ped_2023_poly.json')
-file_path_2 = os.path.join('./pic', 'valid_stats-transbts-brats_ped_2023.json')
+config = Config()
 
-save_path = './pic'
+save_path = config.PIC_DIR
 
-model_1 = "transbts_plly"
-model_2 = "transbts"
+file_path_1 = os.path.join(save_path, 'valid_stats-transbts-brats_ped_2023-poly.json')
+file_path_2 = os.path.join(save_path, 'valid_stats-unet3d-brats_ped_2023-poly.json')
+
+model1 = "TransBTS"
+model2 = "3D U-Net"
 
 dataset = "brats_ped_2023"
 
@@ -30,8 +33,8 @@ width = 0.35
 
 
 fig_loss, ax = plt.subplots(figsize=(20, 8))
-rects1_1 = ax.bar(x - width/2, [round(metric[0], 4) for metric in res_1], width, label='TransBTS')
-rects2_1 = ax.bar(x + width/2, [round(metric[0], 4)  for metric in res_2], width, label='3D UNet')
+rects1_1 = ax.bar(x - width/2, [round(metric[0], 4) for metric in res_1], width, label=model1)
+rects2_1 = ax.bar(x + width/2, [round(metric[0], 4) for metric in res_2], width, label=model2)
 
 # 添加一些文本标签
 ax.set_ylabel('Dice Loss')
@@ -48,9 +51,9 @@ fig_loss.tight_layout()
 plt.savefig(os.path.join(save_path, dataset + "-loss" + ".png"))
 
 
-fig_class1, ax = plt.subplots()
-rects1_2 = ax.bar(x - width/2, [round(metric[1], 4) for metric in res_1], width, label='TransBTS')
-rects2_2 = ax.bar(x + width/2, [round(metric[1], 4) for metric in res_2], width, label='3D UNet')
+fig_class1, ax = plt.subplots(figsize=(20, 8))
+rects1_2 = ax.bar(x - width/2, [round(metric[1], 4) for metric in res_1], width, label=model1)
+rects2_2 = ax.bar(x + width/2, [round(metric[1], 4) for metric in res_2], width, label=model2)
 
 # 添加一些文本标签
 ax.set_ylabel('Dice Score')
@@ -68,9 +71,9 @@ plt.savefig(os.path.join(save_path, dataset + "-class1" + ".png"))
 
 
 
-fig_class2, ax = plt.subplots()
-rects1_3 = ax.bar(x - width/2, [round(metric[2], 4) for metric in res_1], width, label='TransBTS')
-rects2_3 = ax.bar(x + width/2, [round(metric[2], 4) for metric in res_2], width, label='3D UNet')
+fig_class2, ax = plt.subplots(figsize=(20, 8))
+rects1_3 = ax.bar(x - width/2, [round(metric[2], 4) for metric in res_1], width, label=model1)
+rects2_3 = ax.bar(x + width/2, [round(metric[2], 4) for metric in res_2], width, label=model2)
 
 # 添加一些文本标签
 ax.set_ylabel('Dice Score')
@@ -88,9 +91,9 @@ plt.savefig(os.path.join(save_path, dataset + "-class2" + ".png"))
 
 
 
-fig_class3, ax = plt.subplots()
-rects1_4 = ax.bar(x - width/2, [round(metric[3], 4) for metric in res_1], width, label='TransBTS')
-rects2_4 = ax.bar(x + width/2, [round(metric[3], 4) for metric in res_2], width, label='3D UNet')
+fig_class3, ax = plt.subplots(figsize=(20, 8))
+rects1_4 = ax.bar(x - width/2, [round(metric[3], 4) for metric in res_1], width, label=model1)
+rects2_4 = ax.bar(x + width/2, [round(metric[3], 4) for metric in res_2], width, label=model2)
 
 ax.set_ylabel('Dice Score')
 ax.set_title('Dice Score for Class 3 on Validation Set')

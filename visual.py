@@ -1,10 +1,13 @@
 import json
 import matplotlib.pyplot as plt
 import os
+from config import Config
 
-file_path = 'unet3d-brats_ped_2023.json'
+config = Config()
 
-save_path = './pic'
+file_path = os.path.join(config.COLLECTION_DIR, 'unet3d-brats_ped_2023.json')
+
+save_path = config.PIC_DIR
 
 model = "unet3d"
 
