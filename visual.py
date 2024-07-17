@@ -5,13 +5,13 @@ from config import Config
 
 config = Config()
 
-file_path = os.path.join(config.COLLECTION_DIR, 'unet3d-brats_ped_2023.json')
+file_path = os.path.join(config.COLLECTION_DIR, 'transbts-brats_2019.json')
 
 save_path = config.PIC_DIR
 
-model = "unet3d"
+model = "transbts"
 
-dataset = "brats_ped_2023"
+dataset = "brats_2019"
 
 with open(file_path, 'r') as f:
     data = json.load(f)
@@ -19,7 +19,7 @@ with open(file_path, 'r') as f:
 
 plt.figure(figsize=(10, 5))
 plt.plot([item[0] for item in data], linestyle='-', color='b')
-plt.title('Train Loss for TransBTS on BraTS-PEDs 2023')
+plt.title('Train Loss for TransBTS on BraTS 2019')
 plt.xlabel('Epoch')
 plt.ylabel('Dice Loss')
 plt.grid(True)
@@ -29,7 +29,7 @@ plt.savefig(os.path.join(save_path, model + "-" + dataset + "-loss" + ".png"))
 
 plt.figure(figsize=(10, 5))
 plt.plot([item[1] for item in data], linestyle='-', color='darkorange')
-plt.title('Dice Score for Class 1 by TransBTS on BraTS-PEDs 2023')
+plt.title('Dice Score for Class 1 by TransBTS on BraTS 2019')
 plt.xlabel('Epoch')
 plt.ylabel('Dice Score')
 plt.grid(True)
@@ -39,7 +39,7 @@ plt.savefig(os.path.join(save_path, model + "-" + dataset + "-class1" + ".png"))
 
 plt.figure(figsize=(10, 5))
 plt.plot([item[2] for item in data], linestyle='-', color='darkorange')
-plt.title('Dice Score for Class 2 by TransBTS on BraTS-PEDs 2023')
+plt.title('Dice Score for Class 2 by TransBTS on BraTS 2019')
 plt.xlabel('Epoch')
 plt.ylabel('Dice Score')
 plt.grid(True)
@@ -49,7 +49,7 @@ plt.savefig(os.path.join(save_path, model + "-" + dataset + "-class2" + ".png"))
 
 plt.figure(figsize=(10, 5))
 plt.plot([item[3] for item in data], linestyle='-', color='darkorange')
-plt.title('Dice Score for Class 3 by TransBTS on BraTS-PEDs 2023')
+plt.title('Dice Score for Class 3 by TransBTS on BraTS 2019')
 plt.xlabel('Epoch')
 plt.ylabel('Dice Score')
 plt.grid(True)

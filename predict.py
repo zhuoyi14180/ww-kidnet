@@ -20,6 +20,8 @@ from evaluate import softmax_output_dice
 import json
 import gc
 
+from evaluate import calculate_hd95
+
 from utils import Accumulator
 
 config = Config()
@@ -67,10 +69,11 @@ def validate(
         snapshot=False,
         valid=True,
         name_list=None, 
-        save_path=None
+        save_path=None, 
+        affine=None
         ):
 
-    H, W, D = 224, 224, 155
+    H, W, D = 240, 240, 155
     model.eval()
 
     runtimes = []
@@ -97,7 +100,7 @@ def validate(
 
     model.cuda()
     
-    metric = Accumulator(3)
+    metric = Accumulator(6)
 
     for i, (data, idx) in enumerate(data_loader):
         msg = 'Iter {}/{}, '.format(i + 1, len(data_loader))
@@ -141,9 +144,10 @@ def validate(
         if valid:
             loss, score1, score2, score3 = criterion(output, target)
             stats.append({"data": [loss.detach().cpu().item(), score1.detach().cpu().item(), score2.detach().cpu().item(), score3.detach().cpu().item()], "name": name})
-            res = softmax_output_dice(output, target)
-            dice_out.append(res)
-            metric.add(*res)
+            res_score = softmax_output_dice(output, target)
+            res_distance = calculate_hd95(output, target)
+            dice_out.append(res_score)
+            metric.add(*res_score, *res_distance)
 
         logit.to("cpu")
         x.to("cpu")
@@ -169,7 +173,7 @@ def validate(
                     print('1:', np.sum(output == 1), ' | 2:', np.sum(output == 2), ' | 3:', np.sum(output == 3))
                     print('WT:', np.sum((output == 1) | (output == 2) | (output == 3)), ' | TC:',
                           np.sum((output == 1) | (output == 3)), ' | ET:', np.sum(output == 3))
-                nib.save(nib.Nifti1Image(output.astype(np.float32), None), path)
+                nib.save(nib.Nifti1Image(output.astype(np.float64), affine), path)
                 print('{} has been saved successfully.'.format(name))
 
                 if snapshot:
@@ -200,41 +204,42 @@ if __name__ == "__main__":
 
     save_path=config.RES_DIR
     visual_path = config.VISUAL_DIR
+    
 
+    # config = PediatricConfig()
+    # brats_ped_valid = config.BRATS_TRAIN
+    # valid_dir = brats_ped_valid["dir"]
+    # valid_list = brats_ped_valid["list"]
 
-    brats_ped_valid = PediatricConfig().BRATS_VALID
-    valid_dir = brats_ped_valid["dir"]
-    valid_list = brats_ped_valid["list"]
-
-    valid_set = BraTS(os.path.join(valid_dir, valid_list), valid_dir, "test")
-    valid_loader = DataLoader(dataset=valid_set, batch_size=1,
-                              drop_last=False, num_workers=6, pin_memory=True, shuffle=False)
-
-
-    _, model = TransBTS(dataset='brats', _conv_repr=True, _pe_type="learned")
-    load_file = os.path.join(config.CHECK_POINT_DIR, "transbts-brats_ped_2023-2024-06-28", "transbts-brats_ped_2023-last.pth")
-    validate("transbts-brats_ped_2023-poly-valid", valid_loader, model, load_file, snapshot=False, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=False)
-
-
-    model = UNet3D(4, 4)
-    load_file = os.path.join(config.CHECK_POINT_DIR, "unet3d-brats_ped_2023-2024-06-28", "unet3d-brats_ped_2023-last.pth")
-    validate("unet3d-brats_ped_2023-poly-valid", valid_loader, model, load_file, snapshot=False, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=False)
-
-
-
-
-    # brats_valid = AdultConfig().BRATS_VALID
-    # valid_dir = brats_valid["dir"]
-    # valid_list = brats_valid["list"]
-
-    # valid_set = BraTS(os.path.join(valid_dir, valid_list), valid_dir, "test")
+    # valid_set = BraTS(os.path.join(valid_dir, valid_list), valid_dir, "valid")
     # valid_loader = DataLoader(dataset=valid_set, batch_size=1,
     #                           drop_last=False, num_workers=6, pin_memory=True, shuffle=False)
 
 
     # _, model = TransBTS(dataset='brats', _conv_repr=True, _pe_type="learned")
-    # load_file = os.path.join(config.CHECK_POINT_DIR, "transbts-brats_2019-2024-06-26", "transbts-brats_2019-last.pth")
-    # validate("transbts-brats_2019-poly-valid", valid_loader, model, load_file, snapshot=False, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=False)
+    # load_file = os.path.join(config.CHECK_POINT_DIR, "transbts-brats_ped_2023-2024-06-29", "transbts-brats_ped_2023-last.pth")
+    # validate("transbts-brats_ped_2023-poly-valid-tl", valid_loader, model, load_file, snapshot=True, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=True, affine=config.affine)
+
+
+    # model = UNet3D(4, 4)
+    # load_file = os.path.join(config.CHECK_POINT_DIR, "unet3d-brats_ped_2023-2024-06-28", "unet3d-brats_ped_2023-last.pth")
+    # validate("unet3d-brats_ped_2023-poly-valid", valid_loader, model, load_file, snapshot=False, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=False)
+
+
+
+    config = AdultConfig()
+    brats_valid = config.BRATS_TRAIN
+    valid_dir = brats_valid["dir"]
+    valid_list = brats_valid["list"]
+
+    valid_set = BraTS(os.path.join(valid_dir, valid_list), valid_dir, "valid")
+    valid_loader = DataLoader(dataset=valid_set, batch_size=1,
+                              drop_last=False, num_workers=6, pin_memory=True, shuffle=False)
+
+
+    _, model = TransBTS(dataset='brats', _conv_repr=True, _pe_type="learned")
+    load_file = os.path.join(config.CHECK_POINT_DIR, "transbts-brats_2019-2024-06-26", "transbts-brats_2019-last.pth")
+    validate("transbts-brats_2019-poly-valid", valid_loader, model, load_file, snapshot=False, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=True, affine=config.affine)
 
 
     # model = UNet3D(4, 4)

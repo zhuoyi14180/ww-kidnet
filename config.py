@@ -1,4 +1,5 @@
 import os
+import nibabel as nib
 
 
 class Config:
@@ -30,7 +31,11 @@ class PediatricConfig(Config):
             "has_label": False
         }
 
+        example_path = os.path.join(self.BRATS_TRAIN["dir"], "BraTS-PED-00002-000", "BraTS-PED-00002-000-seg.nii.gz")
+
         self.modalities = ('t2f', 't1c', 't1n', 't2w')
+        example = nib.load(example_path)
+        self.affine = example.affine
 
 
 class AdultConfig(Config):
@@ -52,6 +57,12 @@ class AdultConfig(Config):
             }
 
         self.modalities = ('flair', 't1ce', 't1', 't2')
+
+        example_path = os.path.join(self.BRATS_TRAIN["dir"], "HGG", 'BraTS19_2013_12_1', "BraTS19_2013_12_1_seg.nii.gz")
+
+        self.modalities = ('t2f', 't1c', 't1n', 't2w')
+        example = nib.load(example_path)
+        self.affine = example.affine
 
 if __name__ == "__main__":
     config = PediatricConfig()

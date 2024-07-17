@@ -119,10 +119,12 @@ def main_worker():
             os.makedirs(checkpoint_dir)
 
     # writer = SummaryWriter()
+    
+    resume_path = os.path.join(config.CHECK_POINT_DIR, args.resume)
 
-    if os.path.isfile(args.resume) and args.load:
+    if os.path.isfile(resume_path) and args.load:
         logging.info('Loading checkpoint: {}'.format(args.resume))
-        checkpoint = torch.load(args.resume, map_location=lambda storage, loc: storage)
+        checkpoint = torch.load(resume_path, map_location=lambda storage, loc: storage)
 
         model.load_state_dict(checkpoint['state_dict'])
 

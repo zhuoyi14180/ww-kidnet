@@ -25,8 +25,12 @@ def nib_load(file_name):
 
 path = os.path.join(config.BRATS_TRAIN['dir'], "HGG", 'BraTS19_2013_12_1', "BraTS19_2013_12_1_seg.nii.gz")
 
+data = nib_load(path)
 
-label = np.array(nib_load(path), dtype='uint8', order='C')
+affine = data.affine
+
+
+label = np.array(data, dtype='uint8', order='C')
 
 label[label == 4] = 3
 
