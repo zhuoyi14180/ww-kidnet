@@ -5,7 +5,7 @@ import nibabel as nib
 class Config:
     def __init__(self):
         self.BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        self.DATA_DIR = os.path.join("/dcs", "large", "u5531613", "data")
+        self.DATA_DIR = os.path.join("/share", "project", "zhuoyi", "datasets")
         self.LOG_DIR = os.path.join(self.BASE_DIR, "logs")
         self.COLLECTION_DIR = os.path.join(self.BASE_DIR, "collections")
         self.CHECK_POINT_DIR = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'checkpoints')

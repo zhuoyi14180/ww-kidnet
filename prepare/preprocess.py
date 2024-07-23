@@ -72,6 +72,6 @@ def process(info, flag='-'):
 
 
 if __name__ == '__main__':
-    # process(train, flag="_")
+    # process(train, flag="-")
     process(valid, flag="-")
 

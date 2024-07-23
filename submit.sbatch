@@ -27,4 +27,6 @@ source /etc/profile.d/conda.sh
 # torchrun --nproc_per_node=3 ./train.py --model=transbts --end_epoch=1000 --dataset=brats_2019 --save_freq=5000 --seed=1000
 # torchrun --nproc_per_node=3 ./train.py --model=unet3d --end_epoch=1000 --dataset=brats_2019 --save_freq=5000 --seed=1000
 
-torchrun --nproc_per_node=3 ./train.py --model=transbts --end_epoch=1000 --dataset=brats_ped_2023 --save_freq=400 --load=True --resume=./transbts-brats_2019-2024-06-26/transbts-brats_2019-last.pth --lr=0.0001
+torchrun --nproc_per_node=8 ./train.py --model=transbts --end_epoch=1000 --dataset=brats_ped_2023 --save_freq=400 --lr=0.0004 --seed=1000 --gpu=0,1,2,3,4,5,6,7 --batch_size=40
+
+torchrun --nproc_per_node=8 ./train.py --model=unet3d --end_epoch=1000 --dataset=brats_ped_2023 --save_freq=400 --lr=0.0004 --seed=1000 --gpu=0,1,2,3,4,5,6,7 --batch_size=40

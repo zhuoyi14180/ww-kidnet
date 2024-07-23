@@ -20,6 +20,7 @@ from utils import all_reduce_tensor, log_args, adjust_learning_rate, Accumulator
 # from tensorboardX import SummaryWriter
 from torch import nn
 from config import Config, PediatricConfig, AdultConfig
+from torch.cuda.amp import autocast, GradScaler
 
 
 local_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
@@ -105,6 +106,8 @@ def main_worker():
                                                 find_unused_parameters=find_unused_parameters)
     model.train()
 
+    scaler = GradScaler()
+
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, amsgrad=args.amsgrad)
 
     total_params = sum(p.numel() for p in model.parameters())
@@ -164,9 +167,18 @@ def main_worker():
             x = x.cuda(local_rank, non_blocking=True)
             target = target.cuda(local_rank, non_blocking=True)
 
-            output = model(x)
+            with autocast():
+                output = model(x)
+                loss, score1, score2, score3 = crit(output, target)
 
-            loss, score1, score2, score3 = crit(output, target)
+            optimizer.zero_grad()
+                
+            scaler.scale(loss).backward()
+
+            scaler.step(optimizer)
+
+            scaler.update()
+
             reduce_loss = all_reduce_tensor(loss, world_size=num_gpu).data.cpu().numpy()
             reduce_score1 = all_reduce_tensor(score1, world_size=num_gpu).data.cpu().numpy()
             reduce_score2 = all_reduce_tensor(score2, world_size=num_gpu).data.cpu().numpy()
@@ -177,10 +189,6 @@ def main_worker():
             if local_rank == 0:
                 logging.info('Epoch: {}, Iter: {} -- loss: {:.5f} | 1: {:.4f} | 2: {:.4f} | 3: {:.4f}'
                              .format(epoch, i, reduce_loss, reduce_score1, reduce_score2, reduce_score3))
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
 
         end_epoch_time = time.time()
         if local_rank == 0:
