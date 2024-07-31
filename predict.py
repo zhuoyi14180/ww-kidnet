@@ -12,7 +12,7 @@ import imageio
 from config import Config, PediatricConfig, AdultConfig
 from evaluate import dice_score
 from prepare.data import BraTS
-from models.TransBTS.TransBTS_downsample8x_skipconnection import TransBTS
+from models.transbts.transbts_downsample8x import get_default
 from models.unet.unet3d import UNet3D
 from torch.utils.data import DataLoader
 from criterion import softmax_dice
@@ -182,9 +182,10 @@ def validate(
                     ss_img[:, :, 1, :][np.where(output == 2)] = 255
                     ss_img[:, :, 2, :][np.where(output == 3)] = 255
 
-                    for frame in range(D):
-                        if not os.path.exists(os.path.join(visual_path, title, name)):
+                    if not os.path.exists(os.path.join(visual_path, title, name)):
                             os.makedirs(os.path.join(visual_path, title, name))
+
+                    for frame in range(D):
                         imageio.imwrite(os.path.join(visual_path, title, name, str(frame)+'.png'), ss_img[:, :, :, frame])
     
     
@@ -237,7 +238,7 @@ if __name__ == "__main__":
                               drop_last=False, num_workers=6, pin_memory=True, shuffle=False)
 
 
-    _, model = TransBTS(dataset='brats', _conv_repr=True, _pe_type="learned")
+    model = get_default()
     load_file = os.path.join(config.CHECK_POINT_DIR, "transbts-brats_2019-2024-06-26", "transbts-brats_2019-last.pth")
     validate("transbts-brats_2019-poly-valid", valid_loader, model, load_file, snapshot=False, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=True, affine=config.affine)
 

@@ -10,20 +10,21 @@ import json
 import torch
 import torch.backends.cudnn as cudnn
 import torch.optim
-from models.TransBTS.TransBTS_downsample8x_skipconnection import TransBTS
+from models.transbts.transbts_downsample8x import get_default
 from models.unet.unet3d import UNet3D
 
 import criterion
 from prepare.data import BraTS
 from torch.utils.data import DataLoader
-from utils import all_reduce_tensor, log_args, adjust_learning_rate, Accumulator
+from utils import all_reduce_tensor, log_args, adjust_learning_rate, Accumulator, setup, cleanup
 # from tensorboardX import SummaryWriter
 from torch import nn
 from config import Config, PediatricConfig, AdultConfig
 from torch.cuda.amp import autocast, GradScaler
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 
-local_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+local_time = time.strftime(r"%Y-%m-%d %H:%M:%S", time.localtime())
 date = local_time.split(' ')[0]
 
 parser = argparse.ArgumentParser()
@@ -45,8 +46,6 @@ parser.add_argument('--num_class', default=4, type=int)
 
 parser.add_argument('--seed', default=42, type=int)
 
-parser.add_argument('--gpu', default='0,1,2', type=str)
-
 parser.add_argument('--num_workers', default=8, type=int)
 
 parser.add_argument('--batch_size', default=6, type=int)
@@ -63,8 +62,6 @@ parser.add_argument('--load', default=False, type=bool)
 
 args = parser.parse_args()
 
-local_rank = int(os.environ['LOCAL_RANK'])
-
 if args.dataset == "brats_ped_2023":
     config = PediatricConfig()
 elif args.dataset == "brats_2019":
@@ -75,7 +72,8 @@ train_dir = config.BRATS_TRAIN["dir"]
 train_list = config.BRATS_TRAIN["list"]
 
 
-def main_worker():
+def main():
+    local_rank, world_size = setup(args.seed)
     if local_rank == 0:
         log_dir = os.path.join(config.LOG_DIR, args.model + "-" + args.dataset + "-" + date)
         log_file = log_dir + '.txt'
@@ -85,25 +83,14 @@ def main_worker():
             logging.info('{}={}'.format(arg, getattr(args, arg)))
         logging.info('--------------------------------------Model Training-------------------------------------')
 
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.distributed.init_process_group('nccl')
-    torch.cuda.set_device(local_rank)
-
     if args.model == "unet3d":
         model = UNet3D(4, 4)
-        find_unused_parameters = False
     elif args.model == "transbts":
-        _, model = TransBTS(dataset='brats', _conv_repr=True, _pe_type="learned")
-        find_unused_parameters = True
-    else:
-        raise ValueError(f"Invalid model {args.model}, check first.")
+        model = get_default()
 
     model.cuda(local_rank)
-    model = nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank,
-                                                find_unused_parameters=find_unused_parameters)
+    model = DDP(model, device_ids=[local_rank], output_device=local_rank,
+                                                find_unused_parameters=True)
     model.train()
 
     scaler = GradScaler()
@@ -140,10 +127,7 @@ def main_worker():
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_set)
     logging.info('The number of samples for training: {}'.format(len(train_set)))
 
-
-    num_gpu = len(args.gpu.split(","))
-
-    train_loader = DataLoader(dataset=train_set, sampler=train_sampler, batch_size=args.batch_size // num_gpu,
+    train_loader = DataLoader(dataset=train_set, sampler=train_sampler, batch_size=args.batch_size // world_size,
                               drop_last=True, num_workers=args.num_workers, pin_memory=True)
 
     start_time = time.time()
@@ -179,10 +163,10 @@ def main_worker():
 
             scaler.update()
 
-            reduce_loss = all_reduce_tensor(loss, world_size=num_gpu).data.cpu().numpy()
-            reduce_score1 = all_reduce_tensor(score1, world_size=num_gpu).data.cpu().numpy()
-            reduce_score2 = all_reduce_tensor(score2, world_size=num_gpu).data.cpu().numpy()
-            reduce_score3 = all_reduce_tensor(score3, world_size=num_gpu).data.cpu().numpy()
+            reduce_loss = all_reduce_tensor(loss, world_size=world_size).data.cpu().numpy()
+            reduce_score1 = all_reduce_tensor(score1, world_size=world_size).data.cpu().numpy()
+            reduce_score2 = all_reduce_tensor(score2, world_size=world_size).data.cpu().numpy()
+            reduce_score3 = all_reduce_tensor(score3, world_size=world_size).data.cpu().numpy()
 
             metric.add(reduce_loss, reduce_score1, reduce_score2, reduce_score3)
 
@@ -220,6 +204,8 @@ def main_worker():
     if local_rank == 0:
         # writer.close()
         
+        if (not os.path.exists(config.COLLECTION_DIR)):
+            os.makedirs(config.COLLECTION_DIR, exist_ok=True)
         with open(os.path.join(config.COLLECTION_DIR, f"{args.model}-{args.dataset}.json"), "w") as f:
             json.dump(stats, f)
 
@@ -235,14 +221,12 @@ def main_worker():
     total_time = (end_time-start_time) / 3600
     logging.info('The total training time is {:.2f} hours'.format(total_time))
 
+    cleanup()
     logging.info('-----------------------------------Training Process Over---------------------------------')
 
 
 if __name__ == '__main__':
-    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     print(f"Number of devices available: {torch.cuda.device_count()}")
-    print(f"Process {os.getpid()} is using LOCAL_RANK={local_rank}")
-    assert torch.cuda.is_available(), "Only CUDA version is supported."
-    torch.backends.cudnn.enabled = True
-    torch.backends.cudnn.benchmark = True
-    main_worker()
+    cudnn.enabled = True
+    cudnn.benchmark = True
+    main()
