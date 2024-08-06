@@ -1,36 +1,42 @@
 import torch
 from torch import nn
-from .block import DoubleConv3d, Down3d, Up3d
+from models.unet.blocks import DoubleConv3d, Down3d, Up3d
 
 
 class UNet3D(nn.Module):
-    def __init__(self, n_channels, n_classes):
+    def __init__(self, n_channels=4, n_classes=4, base_channels=64, final_act=nn.Softmax):
         super(UNet3D, self).__init__()
         self.n_channels = n_channels
         self.n_classes = n_classes
 
-        self.inc = DoubleConv3d(n_channels, 64, mid_channels=32)
-        self.down1 = Down3d(64, 128, mid_channels=64)
-        self.down2 = Down3d(128, 256, mid_channels=128)
-        self.down3 = Down3d(256, 512, mid_channels=256)
-        self.up1 = Up3d(512, 256)
-        self.up2 = Up3d(256, 128)
-        self.up3 = Up3d(128, 64)
-        self.outc = nn.Conv3d(64, n_classes, kernel_size=1)
+        self.inc = DoubleConv3d(n_channels, base_channels, mid_channels=base_channels // 2)
+        self.down1 = Down3d(base_channels, base_channels * 2, mid_channels=base_channels)
+        self.down2 = Down3d(base_channels * 2, base_channels * 4, mid_channels=base_channels * 2)
+        self.down3 = Down3d(base_channels * 4, base_channels * 8, mid_channels=base_channels * 4)
+        self.up1 = Up3d(base_channels * 8, base_channels * 4)
+        self.up2 = Up3d(base_channels * 4, base_channels * 2)
+        self.up3 = Up3d(base_channels * 2, base_channels)
+        self.outc = nn.Conv3d(base_channels, n_classes, kernel_size=1)
 
-        self.softmax = nn.Softmax(dim=1)
+        if final_act is not None:
+            self.final_act = final_act(dim=1)
+        else:
+            self.final_act = None
 
     def forward(self, x):
         x = self.inc(x)
         x1 = self.down1(x)
         x2 = self.down2(x1)
         x3 = self.down3(x2)
-        y2 = self.up1(x3, x2)
-        y1 = self.up2(y2, x1)
-        y = self.up3(y1, x)
-        y = self.outc(y)
-        return self.softmax(y)
+        x2 = self.up1(x3, x2)
+        x1 = self.up2(x2, x1)
+        x = self.up3(x1, x)
+        logits = self.outc(x)
+        return logits if self.final_act is None else self.final_act(logits)
     
+
+def get_default():
+    return UNet3D()
 
 
 if __name__ == "__main__":

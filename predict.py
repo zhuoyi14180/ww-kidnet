@@ -10,52 +10,18 @@ import numpy as np
 import nibabel as nib
 import imageio
 from config import Config, PediatricConfig, AdultConfig
-from evaluate import dice_score
-from prepare.data import BraTS
-from models.transbts.transbts_downsample8x import get_default
+from evaluate import tailor_and_concat, softmax_dice_score, softmax_mIOU_score
+from data.dataset import BraTS3D
+from models.transbts.transbts_downsample8x import get_default as TransBTS
 from models.unet.unet3d import UNet3D
 from torch.utils.data import DataLoader
 from criterion import softmax_dice
-from evaluate import softmax_output_dice
 import json
 import gc
-
-from evaluate import calculate_hd95
-
 from utils import Accumulator
 
+
 config = Config()
-
-def tailor_and_concat(x, model, flag=True):
-    if (flag == False):
-        return model(x)
-
-    temp = []
-
-    temp.append(x[..., :128, :128, :128])
-    temp.append(x[..., :128, 112:240, :128])
-    temp.append(x[..., 112:240, :128, :128])
-    temp.append(x[..., 112:240, 112:240, :128])
-    temp.append(x[..., :128, :128, 27:155])
-    temp.append(x[..., :128, 112:240, 27:155])
-    temp.append(x[..., 112:240, :128, 27:155])
-    temp.append(x[..., 112:240, 112:240, 27:155])
-
-    y = x.clone()
-
-    for i in range(len(temp)):
-        temp[i] = model(temp[i]).detach().cpu()
-
-    y[..., :128, :128, :128] = temp[0]
-    y[..., :128, 128:240, :128] = temp[1][..., :, 16:128, :]
-    y[..., 128:240, :128, :128] = temp[2][..., 16:128, :, :]
-    y[..., 128:240, 128:240, :128] = temp[3][..., 16:128, 16:128, :]
-    y[..., :128, :128, 128:155] = temp[4][..., 96:123]
-    y[..., :128, 128:240, 128:155] = temp[5][..., :, 16:128, 96:123]
-    y[..., 128:240, :128, 128:155] = temp[6][..., 16:128, :, 96:123]
-    y[..., 128:240, 128:240, 128:155] = temp[7][..., 16:128, 16:128, 96:123]
-
-    return y[..., :155]
 
 
 def validate(
@@ -80,8 +46,6 @@ def validate(
 
     stats = []
 
-    dice_out = []
-
     criterion = softmax_dice
     
     checkpoint = torch.load(load_file)
@@ -100,7 +64,7 @@ def validate(
 
     model.cuda()
     
-    metric = Accumulator(6)
+    metric = Accumulator(3)
 
     for i, (data, idx) in enumerate(data_loader):
         msg = 'Iter {}/{}, '.format(i + 1, len(data_loader))
@@ -131,23 +95,23 @@ def validate(
             output = logit.clone()
         else:
             x = x[..., :155]
-            logit = F.softmax(tailor_and_concat(x, model), 1)  # no flip
-            logit += F.softmax(tailor_and_concat(x.flip(dims=(2,)), model).flip(dims=(2,)), 1)  # flip H
-            logit += F.softmax(tailor_and_concat(x.flip(dims=(3,)), model).flip(dims=(3,)), 1)  # flip W
-            logit += F.softmax(tailor_and_concat(x.flip(dims=(4,)), model).flip(dims=(4,)), 1)  # flip D
-            logit += F.softmax(tailor_and_concat(x.flip(dims=(2, 3)), model).flip(dims=(2, 3)), 1)  # flip H, W
-            logit += F.softmax(tailor_and_concat(x.flip(dims=(2, 4)), model).flip(dims=(2, 4)), 1)  # flip H, D
-            logit += F.softmax(tailor_and_concat(x.flip(dims=(3, 4)), model).flip(dims=(3, 4)), 1)  # flip W, D
-            logit += F.softmax(tailor_and_concat(x.flip(dims=(2, 3, 4)), model).flip(dims=(2, 3, 4)), 1)  # flip H, W, D
+            logit = tailor_and_concat(x, model)  # no flip
+            logit += tailor_and_concat(x.flip(dims=(2,)), model).flip(dims=(2,))  # flip H
+            logit += tailor_and_concat(x.flip(dims=(3,)), model).flip(dims=(3,))  # flip W
+            logit += tailor_and_concat(x.flip(dims=(4,)), model).flip(dims=(4,))  # flip D
+            logit += tailor_and_concat(x.flip(dims=(2, 3)), model).flip(dims=(2, 3))  # flip H, W
+            logit += tailor_and_concat(x.flip(dims=(2, 4)), model).flip(dims=(2, 4))  # flip H, D
+            logit += tailor_and_concat(x.flip(dims=(3, 4)), model).flip(dims=(3, 4))  # flip W, D
+            logit += tailor_and_concat(x.flip(dims=(2, 3, 4)), model).flip(dims=(2, 3, 4))  # flip H, W, D
             output = logit / 8.0  # mean
         
         if valid:
-            loss, score1, score2, score3 = criterion(output, target)
-            stats.append({"data": [loss.detach().cpu().item(), score1.detach().cpu().item(), score2.detach().cpu().item(), score3.detach().cpu().item()], "name": name})
-            res_score = softmax_output_dice(output, target)
-            res_distance = calculate_hd95(output, target)
-            dice_out.append(res_score)
-            metric.add(*res_score, *res_distance)
+            _, score1, score2, score3 = criterion(output, target)
+            dice_out = [score1.detach().cpu().item(), score2.detach().cpu().item(), score3.detach().cpu().item()]
+            miou_out = softmax_mIOU_score(output, target)
+            stats.append({"dice": dice_out, "miou": miou_out, "name": name})
+            
+            metric.add(*dice_out, *miou_out)
 
         logit.to("cpu")
         x.to("cpu")
@@ -188,13 +152,11 @@ def validate(
                     for frame in range(D):
                         imageio.imwrite(os.path.join(visual_path, title, name, str(frame)+'.png'), ss_img[:, :, :, frame])
     
-    
     if valid:
         with open(os.path.join(config.PIC_DIR, f"valid_stats-{title}.json"), "w") as f:
             json.dump(stats, f)
-
         print(dice_out)
-
+        print(miou_out)
         print(metric.avg())
 
 
@@ -206,43 +168,16 @@ if __name__ == "__main__":
     save_path=config.RES_DIR
     visual_path = config.VISUAL_DIR
     
+    config = PediatricConfig()
+    brats_ped_valid = config.BRATS_TRAIN
+    valid_dir = brats_ped_valid["dir"]
+    valid_list = brats_ped_valid["list"]
 
-    # config = PediatricConfig()
-    # brats_ped_valid = config.BRATS_TRAIN
-    # valid_dir = brats_ped_valid["dir"]
-    # valid_list = brats_ped_valid["list"]
-
-    # valid_set = BraTS(os.path.join(valid_dir, valid_list), valid_dir, "valid")
-    # valid_loader = DataLoader(dataset=valid_set, batch_size=1,
-    #                           drop_last=False, num_workers=6, pin_memory=True, shuffle=False)
-
-
-    # _, model = TransBTS(dataset='brats', _conv_repr=True, _pe_type="learned")
-    # load_file = os.path.join(config.CHECK_POINT_DIR, "transbts-brats_ped_2023-2024-06-29", "transbts-brats_ped_2023-last.pth")
-    # validate("transbts-brats_ped_2023-poly-valid-tl", valid_loader, model, load_file, snapshot=True, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=True, affine=config.affine)
-
-
-    # model = UNet3D(4, 4)
-    # load_file = os.path.join(config.CHECK_POINT_DIR, "unet3d-brats_ped_2023-2024-06-28", "unet3d-brats_ped_2023-last.pth")
-    # validate("unet3d-brats_ped_2023-poly-valid", valid_loader, model, load_file, snapshot=False, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=False)
-
-
-
-    config = AdultConfig()
-    brats_valid = config.BRATS_TRAIN
-    valid_dir = brats_valid["dir"]
-    valid_list = brats_valid["list"]
-
-    valid_set = BraTS(os.path.join(valid_dir, valid_list), valid_dir, "valid")
+    valid_set = BraTS3D(os.path.join(valid_dir, valid_list), valid_dir, "valid")
     valid_loader = DataLoader(dataset=valid_set, batch_size=1,
                               drop_last=False, num_workers=6, pin_memory=True, shuffle=False)
 
 
-    model = get_default()
-    load_file = os.path.join(config.CHECK_POINT_DIR, "transbts-brats_2019-2024-06-26", "transbts-brats_2019-last.pth")
-    validate("transbts-brats_2019-poly-valid", valid_loader, model, load_file, snapshot=False, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=True, affine=config.affine)
-
-
-    # model = UNet3D(4, 4)
-    # load_file = os.path.join(config.CHECK_POINT_DIR, "unet3d-brats_2019-2024-06-27", "unet3d-brats_2019-last.pth")
-    # validate("unet3d-brats_2019-poly-valid", valid_loader, model, load_file, snapshot=False, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=False)
+    model = TransBTS(_pe_type="learned")
+    load_file = os.path.join(config.CHECK_POINT_DIR, "transbts-brats_ped_2023-2024-06-29", "transbts-brats_ped_2023-last.pth")
+    validate("transbts-brats_ped_2023-poly-valid-tl", valid_loader, model, load_file, snapshot=True, name_list=valid_set.name_list, verbose=True, save_path=save_path, valid=True, affine=config.affine)

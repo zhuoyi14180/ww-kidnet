@@ -45,7 +45,7 @@ class TransBTS(UNet):
                 self.embedding_dim, self.seq_length
             )
 
-        self.pe_dropout = nn.Dropout(self.dropout_rate)
+        self.pe_drop = nn.Dropout(self.dropout_rate)
 
         self.transformer = Transformer(
             dim=embedding_dim,
@@ -72,7 +72,7 @@ class TransBTS(UNet):
         x = x.view(x.size(0), -1, self.embedding_dim) # (B, H × W × D, C)
         
         x = self.pe(x)
-        x = self.pe_dropout(x)
+        x = self.pe_drop(x)
         x, intmd_x = self.transformer(x)
         x = self.pre_head_ln(x)
 

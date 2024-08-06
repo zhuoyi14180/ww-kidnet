@@ -23,10 +23,10 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def all_reduce_tensor(tensor, op=dist.ReduceOp.SUM, world_size=1):
+def all_reduce_tensor(tensor, op=dist.ReduceOp.SUM, active=1):
     tensor = tensor.clone()
     dist.all_reduce(tensor, op)
-    tensor.div_(world_size)
+    tensor.div_(active)
     return tensor
 
 

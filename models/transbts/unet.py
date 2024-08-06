@@ -13,7 +13,7 @@ from models.modules import ResBlock
 
 
 class UNet(nn.Module):
-    def __init__(self, in_channels=4, base_channels=16, num_classes=4, embedding_dim=512):
+    def __init__(self, in_channels=4, base_channels=16, num_classes=4, embedding_dim=512, final_act=nn.Softmax):
         super().__init__()
 
         # (1, 16, 128, 128, 128)
@@ -64,7 +64,10 @@ class UNet(nn.Module):
 
         self.end = nn.Conv3d(embedding_dim // 32, num_classes, kernel_size=1)
 
-        self.softmax = nn.Softmax(dim=1)
+        if final_act is not None:
+            self.final_act = final_act(dim=1)
+        else:
+            self.final_act = None
 
 
     def encode(self, x):
@@ -84,7 +87,7 @@ class UNet(nn.Module):
         y1 = self.de_up1(y2, x1)
         y1 = self.de_block1(y1)
         y = self.end(y1)
-        return self.softmax(y)
+        return y if self.final_act is None else self.final_act(y)
 
     def forward(self, x):
         return x
