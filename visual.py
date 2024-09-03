@@ -71,7 +71,7 @@ class Visual:
             with open(os.path.join(self.base_dir, "valid", in_file), 'r') as json_file:
                 data = json.load(json_file)
             names.append([item["name"] for item in data])
-            dices.append([item["dice_more"] for item in data])
+            dices.append([item["dice"] for item in data])
             mious.append([item["miou"] for item in data])
             hd95s.append([item["hd95"] for item in data])
         
@@ -108,11 +108,11 @@ class Visual:
 
 
         for idx, model in enumerate(models):
-            rect1 = axm1.bar(x + (start_pos + width * idx), [round(metric[3], 4) for metric in mious[idx]], width, label=model)
+            rect1 = axm1.bar(x + (start_pos + width * idx), [round(metric[0], 4) for metric in mious[idx]], width, label=model)
             axm1.bar_label(rect1, padding=3)
-            rect2 = axm2.bar(x + (start_pos + width * idx), [round(metric[4], 4) for metric in mious[idx]], width, label=model)
+            rect2 = axm2.bar(x + (start_pos + width * idx), [round(metric[1], 4) for metric in mious[idx]], width, label=model)
             axm2.bar_label(rect2, padding=3)
-            rect3 = axm3.bar(x + (start_pos + width * idx), [round(metric[5], 4) for metric in mious[idx]], width, label=model)
+            rect3 = axm3.bar(x + (start_pos + width * idx), [round(metric[2], 4) for metric in mious[idx]], width, label=model)
             axm3.bar_label(rect3, padding=3)
 
         self._post_plot("mIoU (%)", names, (fig_miou_class1, axm1), (fig_miou_class2, axm2), (fig_miou_class3, axm3))
@@ -124,11 +124,11 @@ class Visual:
 
 
         for idx, model in enumerate(models):
-            rect1 = axh1.bar(x + (start_pos + width * idx), [round(metric[4], 4) for metric in hd95s[idx]], width, label=model)
+            rect1 = axh1.bar(x + (start_pos + width * idx), [round(metric[1], 4) for metric in hd95s[idx]], width, label=model)
             axh1.bar_label(rect1, padding=3)
-            rect2 = axh2.bar(x + (start_pos + width * idx), [round(metric[5], 4) for metric in hd95s[idx]], width, label=model)
+            rect2 = axh2.bar(x + (start_pos + width * idx), [round(metric[2], 4) for metric in hd95s[idx]], width, label=model)
             axh2.bar_label(rect2, padding=3)
-            rect3 = axh3.bar(x + (start_pos + width * idx), [round(metric[6], 4) for metric in hd95s[idx]], width, label=model)
+            rect3 = axh3.bar(x + (start_pos + width * idx), [round(metric[3], 4) for metric in hd95s[idx]], width, label=model)
             axh3.bar_label(rect3, padding=3)
 
         self._post_plot("hd95 (mm)", names, (fig_hd95_class1, axh1), (fig_hd95_class2, axh2), (fig_hd95_class3, axh3))
