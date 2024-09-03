@@ -12,8 +12,9 @@ import torch.backends.cudnn as cudnn
 import torch.optim
 from models.transbts.transbts_downsample8x import get_default as TransBTS
 from models.unet.unet3d import get_default as UNet3D
-from models.vit.vit2d import VisionTransformer2D as ViT2D
+from models.vit.vit2d import get_default as ViT2D
 from models.unet.unet2d import get_default as UNet2D
+from models.swinunetr.swinunetr import get_default as SwinUNETR
 
 import criterion
 from data.dataset import BraTS3D, BraTS2D
@@ -72,7 +73,6 @@ root = config.BRATS_DIR
 train_dir = config.BRATS_TRAIN["dir"]
 train_list = config.BRATS_TRAIN["list"]
 
-
 def main():
     local_rank, world_size = setup(args.seed)
     if local_rank == 0:
@@ -83,6 +83,9 @@ def main():
         for arg in vars(args):
             logging.info('{}={}'.format(arg, getattr(args, arg)))
         logging.info('--------------------------------------Model Training-------------------------------------')
+
+    
+    final_act = None
 
     tra_st = (os.path.join(train_dir, train_list), train_dir, "train")
     val_st = (os.path.join(train_dir, train_list), train_dir, "valid")
@@ -102,6 +105,11 @@ def main():
         model = UNet2D()
         train_set = BraTS2D(*tra_st)
         valid_set = BraTS2D(*val_st)
+    elif args.model == "swinunetr":
+        model = SwinUNETR()
+        train_set = BraTS3D(*tra_st)
+        valid_set = BraTS3D(*val_st)
+        final_act = nn.Softmax(dim=1)
 
     model.cuda(local_rank)
     model = DDP(model, device_ids=[local_rank], output_device=local_rank,
@@ -154,11 +162,11 @@ def main():
     stats_train = []
     stats_valid = []
 
-    init_dice = validate(model, valid_loader, crit, local_rank, active=world_size)
+    init_dice = validate(model, valid_loader, crit, local_rank, active=world_size, final_act=final_act)
     logging.info('Epoch: 0 -- Initial Stage -- softmax dice loss: {:.5f} | dice score for class 1: {:.4f} | dice score for class 2: {:.4f} | dice score for class 3: {:.4f}'
                              .format(*init_dice.avg()))
 
-    for epoch in range(args.start_epoch, args.end_epoch):
+    for epoch in range(args.start_epoch, args.end_epoch + 1):
         train_sampler.set_epoch(epoch)
         valid_sampler.set_epoch(epoch)
         setproctitle.setproctitle('{}: {}/{}'.format(args.model, epoch, args.end_epoch))
@@ -176,6 +184,8 @@ def main():
 
             with autocast():
                 output = model(x)
+                if final_act is not None:
+                    output = final_act(output)
                 loss, score1, score2, score3 = crit(output, target)
 
             optimizer.zero_grad()
@@ -197,7 +207,7 @@ def main():
                 logging.info('Epoch: {}, Iter: {} -- loss: {:.5f} | 1: {:.4f} | 2: {:.4f} | 3: {:.4f}'
                              .format(epoch, i, reduce_loss, reduce_score1, reduce_score2, reduce_score3))
         
-        metric_valid = validate(model, valid_loader, crit, local_rank, active=world_size)
+        metric_valid = validate(model, valid_loader, crit, local_rank, active=world_size, final_act=final_act)
         end_epoch_time = time.time()
         if local_rank == 0:
             logging.info('Epoch: {} -- Training Stage -- softmax dice loss: {:.5f} | dice score for class 1: {:.4f} | dice score for class 2: {:.4f} | dice score for class 3: {:.4f}'
@@ -206,8 +216,8 @@ def main():
             logging.info('Epoch: {} -- Validation Stage -- softmax dice loss: {:.5f} | dice score for class 1: {:.4f} | dice score for class 2: {:.4f} | dice score for class 3: {:.4f}'
                              .format(epoch, *metric_valid.avg()))
             
-            stats_train.append(metric_train.data)
-            stats_valid.append(metric_valid.data)
+            stats_train.append(metric_train.avg())
+            stats_valid.append(metric_valid.avg())
 
             if ((epoch) % int(args.save_freq) == 0 and epoch != args.end_epoch) or args.end_epoch - epoch == 1 or args.end_epoch - epoch == 2 or args.end_epoch - epoch == 3:
                 file_name = os.path.join(checkpoint_dir, '{}-{}-epoch_{}.pth'.format(args.model, args.dataset, epoch))
@@ -225,6 +235,7 @@ def main():
     if local_rank == 0:
         if (not os.path.exists(config.COLLECTION_DIR)):
             os.makedirs(config.COLLECTION_DIR, exist_ok=True)
+            
         with open(os.path.join(config.COLLECTION_DIR, f"{args.model}-{args.dataset}-train.json"), "w") as f:
             json.dump(stats_train, f)
 
@@ -247,7 +258,7 @@ def main():
     logging.info('-----------------------------------Training Process Over---------------------------------')
 
 
-def validate(model, loader, criterion, local_rank, active):
+def validate(model, loader, criterion, local_rank, active, final_act):
     model.eval()
     metric = Accumulator(4)
     with torch.no_grad():
@@ -257,6 +268,8 @@ def validate(model, loader, criterion, local_rank, active):
             target = target.cuda(local_rank, non_blocking=True)
             with autocast():
                 output = model(x)
+                if final_act is not None:
+                    output = final_act(output)
                 loss, score1, score2, score3 = criterion(output, target)
             reduce_loss = all_reduce_tensor(loss, active=active).data.cpu().numpy()
             sum_score1 = all_reduce_tensor(score1, active=active).data.cpu().numpy()

@@ -81,7 +81,7 @@ class RandomCrop2D:
         return {'image': image, 'label': label}
     
 
-class FixedCrop:
+class FixedCrop3D:
     def __call__(self, sample):
         image = sample['image']
         label = sample['label']
@@ -91,6 +91,19 @@ class FixedCrop:
 
         image = image[H: H + 128, W: W + 128, D: D + 128, ...]
         label = label[..., H: H + 128, W: W + 128, D: D + 128]
+
+        return {'image': image, 'label': label}
+
+
+class FixedCrop2D:
+    def __call__(self, sample):
+        image = sample['image']
+        label = sample['label']
+        H = 8
+        W = 8
+
+        image = image[H: H + 224, W: W + 224, ...]
+        label = label[..., H: H + 224, W: W + 224]
 
         return {'image': image, 'label': label}
 

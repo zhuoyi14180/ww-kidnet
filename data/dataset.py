@@ -4,7 +4,7 @@ import pickle
 import numpy as np
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
-from .augment import Padding, RandomCrop2D, RandomCrop3D, RandomFlip2D, RandomFlip3D, RandomIntensityShift2D, RandomIntensityShift3D, RandomRotate3D, RandomRotate2D, ToTensor3D, ToTensor2D, FixedCrop
+from .augment import Padding, RandomCrop2D, RandomCrop3D, RandomFlip2D, RandomFlip3D, RandomIntensityShift2D, RandomIntensityShift3D, RandomRotate3D, RandomRotate2D, ToTensor3D, ToTensor2D, FixedCrop3D, FixedCrop2D
 
 
 np.random.seed(42)
@@ -42,12 +42,12 @@ def transform_valid(sample, mode_3d=True):
         transform = transforms.Compose([
             Padding(),
             # MaxMinNormalization(),
-            RandomCrop3D(), 
+            # FixedCrop3D(), # enable when training
             ToTensor3D()
         ])
     else: 
         transform = transforms.Compose([
-            RandomCrop2D((224, 224)),
+            # FixedCrop2D(), # enable when training
             ToTensor2D()
         ])
 
@@ -55,7 +55,7 @@ def transform_valid(sample, mode_3d=True):
 
 
 class BraTS(Dataset):
-    def __init__(self, list_file, root, mode='train', split_rate=0.9, lazy_load=True):
+    def __init__(self, list_file, root, mode='train', split_rate=0.9, lazy_load=False):
         paths, names = [], []
         with open(list_file) as f:
             for line in f:
@@ -93,7 +93,7 @@ class BraTS(Dataset):
     
 
 class BraTS3D(BraTS):
-    def __init__(self, list_file, root, mode='train', split_rate=0.9, lazy_load=True):
+    def __init__(self, list_file, root, mode='train', split_rate=0.9, lazy_load=False):
         super().__init__(list_file, root, mode, split_rate, lazy_load)
         self.count = len(self.names)
 
@@ -121,7 +121,7 @@ class BraTS3D(BraTS):
     
 
 class BraTS2D(BraTS):
-    def __init__(self, list_file, root, mode='train', split_rate=0.9, lazy_load=True):
+    def __init__(self, list_file, root, mode='train', split_rate=0.9, lazy_load=False):
         super().__init__(list_file, root, mode, split_rate, lazy_load)
         self.count = len(self.names) * 155
 

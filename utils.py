@@ -3,6 +3,8 @@ import logging
 import numpy as np
 import torch
 import random
+from tqdm import tqdm
+import torch.nn.functional as F
 
 
 def setup(seed):
@@ -78,14 +80,16 @@ class Accumulator:
         return [i/self.counter for i in self.data]
 
 
+# def one_hot(target, n_classes):
+#     H, W, D = target.size()
+#     res = torch.zeros((n_classes, H, W, D), dtype=target.dtype).cuda()
+#     for i in range(n_classes):
+#         index_list = torch.nonzero(target == i, as_tuple=False)
+#         for j in tqdm(range(len(index_list))):
+#             height, width, depth = index_list[j]
+#             res[i, height, width, depth] = 1
+#     return res.float()
+
+
 def one_hot(target, n_classes):
-    B, H, W, D = target.size()
-    res = torch.zeros((B, n_classes, H, W, D), dtype=target.dtype).cuda()
-    for i in range(n_classes):
-        index_list = (target == i).nonzero()
-
-        for j in range(len(index_list)):
-            batch, height, width, depth = index_list[j]
-            res[B, i, H, W, D] = 1
-
-    return res.float()
+    return F.one_hot(target.long(), n_classes).permute(3, 0, 1, 2).float()
